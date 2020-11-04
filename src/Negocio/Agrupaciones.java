@@ -3,6 +3,8 @@ package Negocio;
 import Soporte.ArchivoDeTexto;
 import Soporte.TSBHashtable;
 
+import java.util.Collection;
+
 public class Agrupaciones {
     private ArchivoDeTexto archivoAgrupaciones;
     private ArchivoDeTexto archivoMesas;
@@ -19,12 +21,7 @@ public class Agrupaciones {
         return toString();
     }
 
-    @Override
-    public String toString() {
-        final StringBuilder sb = new StringBuilder();
-
-        for (Object o : tabla.values())
-            sb.append("\n" + o);
-            return sb.toString();
+    public Collection getResultados() {
+        return tabla.values();
     }
 }

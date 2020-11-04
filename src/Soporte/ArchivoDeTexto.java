@@ -1,6 +1,7 @@
 package Soporte;
 
 import Negocio.Agrupacion;
+import Negocio.Region;
 
 import java.io.File;
 import java.io.FileNotFoundException;
@@ -31,6 +32,44 @@ public class ArchivoDeTexto {
             e.printStackTrace();
         }
         return tabla;
+    }
+
+    public Region seleccionarRegiones() {
+        String linea = "", campos[], codigo, nombre;
+        Region pais = new Region("00", "Argentina");
+        Region distrito, seccion;
+        try {
+            Scanner entrada = new Scanner(archivo);
+            while (entrada.hasNext()){
+                linea = entrada.nextLine();
+                campos = linea.split("\\|");
+                codigo = campos[0];
+                nombre = campos[1];
+                switch (codigo.length()){
+                    case 2:
+                        //Distrito
+                        distrito = pais.getOrPutSubregion(codigo);
+                        distrito.setNombre(nombre);
+                        break;
+                    case 5:
+                        //Seccion
+                        distrito = pais.getOrPutSubregion(codigo.substring(0, 2));
+                        seccion = distrito.getOrPutSubregion(codigo);
+                        seccion.setNombre(nombre);
+                        break;
+                    case 11:
+                        //Circuito
+                        distrito = pais.getOrPutSubregion(codigo.substring(0, 2));
+                        seccion = distrito.getOrPutSubregion(codigo.substring(0, 5));
+                        seccion.agregarSubregion(new Region(codigo, nombre));
+                        break;
+                }
+
+            }
+        } catch (FileNotFoundException e) {
+            e.printStackTrace();
+        }
+        return pais;
     }
 
     public void sumarVotosAgrupaciones(TSBHashtable tabla) {
