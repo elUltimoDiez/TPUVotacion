@@ -1,19 +1,21 @@
 package Negocio;
 
-import Soporte.ArchivoDeTexto;
-import Soporte.TSBHashtable;
-
+import Soporte.TSBHashtableDA;
 import java.util.Collection;
 
 public class Region {
     private String codigo;
     private String nombre;
-    private TSBHashtable subregiones;
+    private TSBHashtableDA subregiones;
 
     public Region(String codigo, String nombre){
         this.codigo = codigo;
         this.nombre = nombre;
-        subregiones = new TSBHashtable();
+        subregiones = new TSBHashtableDA(10);
+    }
+
+    public String getCodigo() {
+        return codigo;
     }
 
     public void setNombre(String nombre) {

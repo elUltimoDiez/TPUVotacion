@@ -2,6 +2,7 @@ package Soporte;
 
 import Negocio.Agrupacion;
 import Negocio.Region;
+import Negocio.Resultados;
 
 import java.io.File;
 import java.io.FileNotFoundException;
@@ -14,9 +15,9 @@ public class ArchivoDeTexto {
         archivo = new File(ruta);
     }
 
-    public TSBHashtable seleccionarAgrupaciones() {
+    public TSBHashtableDA seleccionarAgrupaciones() {
         String linea = "", campos[];
-        TSBHashtable tabla = new TSBHashtable(10);
+        TSBHashtableDA tabla = new TSBHashtableDA(10);
         try {
             Scanner entrada = new Scanner(archivo);
             while (entrada.hasNext()){
@@ -64,7 +65,6 @@ public class ArchivoDeTexto {
                         seccion.agregarSubregion(new Region(codigo, nombre));
                         break;
                 }
-
             }
         } catch (FileNotFoundException e) {
             e.printStackTrace();
@@ -72,21 +72,42 @@ public class ArchivoDeTexto {
         return pais;
     }
 
-    public void sumarVotosAgrupaciones(TSBHashtable tabla) {
+    public void sumarVotosAgrupaciones(TSBHashtableDA tabla) {
         String linea = "", campos[];
         Agrupacion agrupacion;
         int votos;
-
         try {
             Scanner entrada = new Scanner(archivo);
             while (entrada.hasNext()){
                 linea = entrada.nextLine();
                 campos = linea.split("\\|");
-
                 if (campos[4].compareTo("000100000000000") == 0) {
                     agrupacion = (Agrupacion) tabla.get(campos[5]);
                     votos = Integer.parseInt(campos[6]);
                     agrupacion.sumarVotos(votos);
+                }
+            }
+        } catch (FileNotFoundException e) {
+            e.printStackTrace();
+        }
+    }
+
+    public void sumarVotosPorRegion(Resultados resultados) {
+        String linea = "", campos[];
+        int votos;
+        try {
+            Scanner entrada = new Scanner(archivo);
+            while (entrada.hasNext()){
+                linea = entrada.nextLine();
+                campos = linea.split("\\|");
+                if (campos[4].compareTo("000100000000000") == 0) {
+                    votos = Integer.parseInt(campos[6]);
+                    //Votos del pais
+                    resultados.sumarVotos("00", campos[5], votos);
+                    //Votos del distrito, seccion y circuito
+                    for (int i=0; i<3; i++){
+                        resultados.sumarVotos(campos[i], campos[5], votos);
+                    }
                 }
             }
         } catch (FileNotFoundException e) {

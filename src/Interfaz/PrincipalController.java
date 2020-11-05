@@ -1,9 +1,6 @@
 package Interfaz;
 
-import Negocio.Agrupacion;
-import Negocio.Agrupaciones;
-import Negocio.Region;
-import Negocio.Regiones;
+import Negocio.*;
 import Soporte.ArchivoDeTexto;
 import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
@@ -22,6 +19,7 @@ public class PrincipalController {
     public ComboBox cmbDistrito;
     public ComboBox cmbSeccion;
     public ComboBox cmbCircuito;
+    public Resultados resultados;
 
     public void cambiarUbicacion(ActionEvent actionEvent) {
         DirectoryChooser dc = new DirectoryChooser();
@@ -35,31 +33,37 @@ public class PrincipalController {
     }
 
     public void cargarDatos(ActionEvent actionEvent) {
-        Agrupaciones agrupaciones = new Agrupaciones(lblUbicacion.getText());
         ObservableList ol;
-        ol = FXCollections.observableArrayList(agrupaciones.getResultados());
-        lvwResultados.setItems(ol);
+
+        Agrupaciones.leerAgrupaciones(lblUbicacion.getText());
 
         Regiones regiones = new Regiones(lblUbicacion.getText());
         ol = FXCollections.observableArrayList(regiones.getDistritos());
         cmbDistrito.setItems(ol);
+
+        resultados = new Resultados(lblUbicacion.getText());
+        ol = FXCollections.observableArrayList(resultados.getResultadosRegion("00"));
+        lvwResultados.setItems(ol);
     }
 
 
-    public void filtrarSecciones(ActionEvent actionEvent) {
+    public void elegirDistrito(ActionEvent actionEvent) {
         Region distrito = (Region) cmbDistrito.getValue();
         ObservableList ol = FXCollections.observableArrayList(distrito.getSubregiones());
         cmbSeccion.setItems(ol);
+        ol = FXCollections.observableArrayList(resultados.getResultadosRegion(distrito.getCodigo()));
+        lvwResultados.setItems(ol);
     }
 
-    public void filtrarCircuitos(ActionEvent actionEvent) {
+    public void elegirSeccion(ActionEvent actionEvent) {
         if (cmbSeccion.getValue() != null){
             Region seccion = (Region) cmbSeccion.getValue();
             ObservableList ol = FXCollections.observableArrayList(seccion.getSubregiones());
             cmbCircuito.setItems(ol);
+            ol = FXCollections.observableArrayList(resultados.getResultadosRegion(seccion.getCodigo()));
+            lvwResultados.setItems(ol);
         } else{
             cmbCircuito.getItems().clear();
         }
-
     }
 }

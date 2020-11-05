@@ -28,4 +28,8 @@ public class Agrupacion {
         sb.append('}');
         return sb.toString();
     }
+
+    public String getNombre() {
+        return nombre;
+    }
 }
