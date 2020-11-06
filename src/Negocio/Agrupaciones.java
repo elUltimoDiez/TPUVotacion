@@ -1,15 +1,15 @@
 package Negocio;
 
 import Soporte.ArchivoDeTexto;
-import Soporte.TSBHashtableDA;
+import Soporte.TSBHashtable;
 import java.util.Collection;
 
 public class Agrupaciones {
-    private static TSBHashtableDA inicial;
-    private TSBHashtableDA tablaVotacion;
+    private static TSBHashtable inicial;
+    private TSBHashtable tablaVotacion;
 
     public Agrupaciones (){
-        tablaVotacion = new TSBHashtableDA();
+        tablaVotacion = new TSBHashtable();
         for (Object o : inicial.values()) {
             Agrupacion agrupacion = (Agrupacion) o;
             tablaVotacion.put(agrupacion.getCodigo(), new Agrupacion(agrupacion.getCodigo(), agrupacion.getNombre()));

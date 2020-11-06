@@ -1,36 +1,64 @@
 package Soporte;
 
 import java.io.Serializable;
-import java.util.*;
+import java.util.AbstractSet;
+import java.util.AbstractCollection;
+import java.util.Collection;
+import java.util.ConcurrentModificationException;
+import java.util.Iterator;
+import java.util.Map;
+import java.util.NoSuchElementException;
+import java.util.Objects;
+import java.util.Set;
 
 /**
- * Clase para emular la funcionalidad de la clase java.util.Hashtable, pero implementada
- * en base al modelo de Resolución de Colisiones por Direccionamiento Abierto. Modelo para
- * aplicar de base para el desarrollo del TPU.
- *
+ * Clase para emular la funcionalidad de la clase java.util.Hashtable provista
+ * en forma nativa por Java. Una TSBHashtable usa un arreglo de listas de la 
+ * clase TSBArrayList a modo de buckets (o listas de desborde) para resolver las
+ * colisiones que pudieran presentarse. 
+ * 
+ * Se almacenan en la tabla pares de objetos (key, value), en donde el objeto 
+ * key actúa como clave para identificar al objeto value. La tabla no admite 
+ * repetición de claves (no se almacenarán dos pares de objetos con la misma
+ * clave). Tampoco acepta referencias nulas (tanto para las key como para los
+ * values): no será insertado un par (key, value) si alguno de ambos objetos es
+ * null. 
+ * 
+ * Se ha emulado tanto como ha sido posible el comportamiento de la clase ya 
+ * indicada java.util.Hashtable. En esa clase, el parámetro loadFactor se usa
+ * para determinar qué tan llena está la tabla antes de lanzar un proceso de 
+ * rehash: si loadFactor es 0.75, entonces se hará un rehash cuando la cantidad 
+ * de casillas ocupadas en el arreglo de soporte sea un 75% del tamaño de ese 
+ * arreglo. En nuestra clase TSBHashtable, mantuvimos el concepto de loadFactor
+ * (ahora llamado load_factor) pero con una interpretación distinta: en nuestro
+ * modelo, se lanza un rehash si la cantidad promedio de valores por lista es 
+ * mayor a cierto número constante y pequeño, que asociamos al load_factor para 
+ * mantener el espíritu de la implementación nativa. En nuestro caso, si el 
+ * valor load_factor es 0.8 entonces se lanzará un rehash si la cantidad 
+ * promedio de valores por lista es mayor a 0.8 * 10 = 8 elementos por lista.
+ * 
  * @author Ing. Valerio Frittelli.
- * @version Octubre de 2019.
+ * @version Septiembre de 2017.
  * @param <K> el tipo de los objetos que serán usados como clave en la tabla.
  * @param <V> el tipo de los objetos que serán los valores de la tabla.
  */
-public class TSBHashtableDA<K,V> implements Map<K,V>, Cloneable, Serializable
+public class TSBHashtable<K,V> implements Map<K,V>, Cloneable, Serializable
 {
-    //************************ Constantes (privadas o públicas).
+    //************************ Constantes (privadas o públicas).    
+    
+    // el tamaño máximo que podrá tener el arreglo de soprte...
+    private final static int MAX_SIZE = Integer.MAX_VALUE;
 
-    // estados en los que puede estar una casilla o slot de la tabla...
-    public static final int OPEN = 0;
-    public static final int CLOSED = 1;
-    public static final int TOMBSTONE = 2;
 
     //************************ Atributos privados (estructurales).
-
-    // la tabla hash: el arreglo que contiene todos los objetos...
-    private Object table[];
+    
+    // la tabla hash: el arreglo que contiene las listas de desborde...
+    private TSBArrayList<Map.Entry<K, V>> table[];
     
     // el tamaño inicial de la tabla (tamaño con el que fue creada)...
     private int initial_capacity;
     
-    // la cantidad de objetos que contiene la tabla...
+    // la cantidad de objetos que contiene la tabla en TODAS sus listas...
     private int count;
     
     // el factor de carga para calcular si hace falta un rehashing...
@@ -62,49 +90,47 @@ public class TSBHashtableDA<K,V> implements Map<K,V>, Cloneable, Serializable
 
     /**
      * Crea una tabla vacía, con la capacidad inicial igual a 11 y con factor 
-     * de carga igual a 0.5f (que equivale a un nivel de carga del 50%).
+     * de carga igual a 0.8f. 
      */    
-    public TSBHashtableDA()
+    public TSBHashtable()
     {
-        this(11, 0.5f);
+        this(5, 0.8f);
     }
     
     /**
      * Crea una tabla vacía, con la capacidad inicial indicada y con factor 
-     * de carga igual a 0.5f (que equivale a un nivel de carga del 50%).
+     * de carga igual a 0.8f. 
      * @param initial_capacity la capacidad inicial de la tabla.
      */    
-    public TSBHashtableDA(int initial_capacity)
+    public TSBHashtable(int initial_capacity)
     {
-        this(initial_capacity, 0.5f);
+        this(initial_capacity, 0.8f);
     }
 
     /**
      * Crea una tabla vacía, con la capacidad inicial indicada y con el factor 
      * de carga indicado. Si la capacidad inicial indicada por initial_capacity 
      * es menor o igual a 0, la tabla será creada de tamaño 11. Si el factor de
-     * carga indicado es negativo, cero o mayor a 0.5, se ajustará a 0.5f. Si el
-     * valor de initial_capacity no es primo, el tamaño se ajustará al primer
-     * primo que sea mayor a initial_capacity.
+     * carga indicado es negativo o cero, se ajustará a 0.8f.
      * @param initial_capacity la capacidad inicial de la tabla.
      * @param load_factor el factor de carga de la tabla.
      */
-    public TSBHashtableDA(int initial_capacity, float load_factor)
+    public TSBHashtable(int initial_capacity, float load_factor)
     {
-        if(load_factor <= 0 || load_factor > 0.5) { load_factor = 0.5f; }
+        if(load_factor <= 0) { load_factor = 0.8f; }
         if(initial_capacity <= 0) { initial_capacity = 11; }
         else
         {
-            if(!isPrime(initial_capacity))
+            if(initial_capacity > TSBHashtable.MAX_SIZE) 
             {
-                initial_capacity = nextPrime(initial_capacity);
+                initial_capacity = TSBHashtable.MAX_SIZE;
             }
         }
         
-        this.table = new Object[initial_capacity];
+        this.table = new TSBArrayList[initial_capacity];
         for(int i=0; i<table.length; i++)
         {
-            table[i] = new Entry<K, V>(null, null);
+            table[i] = new TSBArrayList<>();
         }
         
         this.initial_capacity = initial_capacity;
@@ -117,9 +143,9 @@ public class TSBHashtableDA<K,V> implements Map<K,V>, Cloneable, Serializable
      * Crea una tabla a partir del contenido del Map especificado.
      * @param t el Map a partir del cual se creará la tabla.
      */     
-    public TSBHashtableDA(Map<? extends K,? extends V> t)
+    public TSBHashtable(Map<? extends K,? extends V> t)
     {
-        this(11, 0.5f);
+        this(11, 0.8f);
         this.putAll(t);
     }
     
@@ -183,10 +209,13 @@ public class TSBHashtableDA<K,V> implements Map<K,V>, Cloneable, Serializable
     @Override
     public V get(Object key) 
     {
-        // HACER...
-        if(key == null) throw new NullPointerException("get(): parámetro null");
+       if(key == null) throw new NullPointerException("get(): parámetro null");
        
-        return null;
+       int ib = this.h(key.hashCode());
+       TSBArrayList<Map.Entry<K, V>> bucket = this.table[ib];
+            
+       Map.Entry<K, V> x = this.search_for_entry((K)key, bucket);
+       return (x != null)? x.getValue() : null;
     }
 
     /**
@@ -206,10 +235,11 @@ public class TSBHashtableDA<K,V> implements Map<K,V>, Cloneable, Serializable
     {
        if(key == null || value == null) throw new NullPointerException("put(): parámetro null");
        
-       int ik = this.h(key);
-
+       int ib = this.h(key);
+       TSBArrayList<Map.Entry<K, V>> bucket = this.table[ib];
+            
        V old = null;
-       Map.Entry<K, V> x = this.search_for_entry((K)key, ik);
+       Map.Entry<K, V> x = this.search_for_entry((K)key, bucket);
        if(x != null) 
        {
            old = x.getValue();
@@ -217,11 +247,12 @@ public class TSBHashtableDA<K,V> implements Map<K,V>, Cloneable, Serializable
        }
        else
        {
-           if(this.load_level() >= this.load_factor) { this.rehash(); }
-           int pos = search_for_OPEN(this.table, this.h(key));
-           Map.Entry<K, V> entry = new Entry<>(key, value, CLOSED);
-           table[pos] = entry;
+           if(this.averageLength() >= this.load_factor * 10) this.rehash();
+           ib = this.h(key);
+           bucket = this.table[ib];
 
+           Map.Entry<K, V> entry = new Entry<>(key, value);
+           bucket.add(entry);
            this.count++;
            this.modCount++;
        }
@@ -240,10 +271,21 @@ public class TSBHashtableDA<K,V> implements Map<K,V>, Cloneable, Serializable
     @Override
     public V remove(Object key) 
     {
-        // HACER...
-        if(key == null) throw new NullPointerException("remove(): parámetro null");
-
-        return null;
+       if(key == null) throw new NullPointerException("remove(): parámetro null");
+       
+       int ib = this.h(key.hashCode());
+       TSBArrayList<Map.Entry<K, V>> bucket = this.table[ib];
+       
+       int ik = this.search_for_index((K)key, bucket);
+       V old = null;
+       if(ik != -1)
+       {
+           old = bucket.remove(ik).getValue();
+           this.count--;
+           this.modCount++;
+       }
+       
+       return old;        
     }
 
     /**
@@ -263,15 +305,20 @@ public class TSBHashtableDA<K,V> implements Map<K,V>, Cloneable, Serializable
     }
 
     /**
-     * Elimina el contenido de la tabla, de forma de dejarla vacía. En esta
+     * Elimina todo el contenido de la tabla, de forma de dejarla vacía. En esta
      * implementación además, el arreglo de soporte vuelve a tener el tamaño que
      * inicialmente tuvo al ser creado el objeto.
      */
     @Override
     public void clear() 
     {
-        // HACER... obvio...
-
+        this.table = new TSBArrayList[this.initial_capacity];
+        for(int i = 0; i < this.table.length; i++)
+        {
+            this.table[i] = new TSBArrayList<>();
+        }
+        this.count = 0;
+        this.modCount++;
     }
 
     /**
@@ -368,20 +415,27 @@ public class TSBHashtableDA<K,V> implements Map<K,V>, Cloneable, Serializable
      * los objetos que esas listas contienen: en cada bucket de la tabla se 
      * almacenan las direcciones de los mismos objetos que contiene la original. 
      * @return una copia superficial de la tabla.
-     * @throws java.lang.CloneNotSupportedException si la clase no implementa la
+     * @throws CloneNotSupportedException si la clase no implementa la
      *         interface Cloneable.    
      */ 
     @Override
     protected Object clone() throws CloneNotSupportedException 
     {
-        // HACER...
-        TSBHashtableDA<K, V> t = (TSBHashtableDA<K, V>)super.clone();
-
+        TSBHashtable<K, V> t = (TSBHashtable<K, V>)super.clone();
+        t.table = new TSBArrayList[table.length];
+        for (int i = table.length ; i-- > 0 ; ) 
+        {
+            t.table[i] = (TSBArrayList<Map.Entry<K, V>>) table[i].clone();
+        }
+        t.keySet = null;
+        t.entrySet = null;
+        t.values = null;
+        t.modCount = 0;
         return t;
     }
 
     /**
-     * Determina si esta tabla es igual al objeto especificado.
+     * Determina si esta tabla es igual al objeto espeficicado.
      * @param obj el objeto a comparar con esta tabla.
      * @return true si los objetos son iguales.
      */
@@ -436,24 +490,19 @@ public class TSBHashtableDA<K,V> implements Map<K,V>, Cloneable, Serializable
     }
     
     /**
-     * Devuelve el contenido de la tabla en forma de String.
+     * Devuelve el contenido de la tabla en forma de String. Sólo por razones de
+     * didáctica, se hace referencia explícita en esa cadena al contenido de 
+     * cada una de las listas de desborde o buckets de la tabla.
      * @return una cadena con el contenido completo de la tabla.
      */
     @Override
     public String toString() 
     {
-        // REVISAR... Asegúrense de que funciona bien...
-        StringBuilder cad = new StringBuilder("[");
+        StringBuilder cad = new StringBuilder("");
         for(int i = 0; i < this.table.length; i++)
         {
-            Entry<K, V> entry = (Entry<K, V>) table[i];
-            if(entry.getState() == CLOSED)
-            {
-                cad.append(entry.toString());
-                cad.append(" ");
-            }
+            cad.append("\nLista ").append(i).append(":\n\t").append(this.table[i].toString());   
         }
-        cad.append("]");
         return cad.toString();
     }
     
@@ -468,9 +517,17 @@ public class TSBHashtableDA<K,V> implements Map<K,V>, Cloneable, Serializable
      */
     public boolean contains(Object value)
     {
-        // HACER...
         if(value == null) return false;
         
+        for(TSBArrayList<Map.Entry<K, V>> bucket : this.table)
+        {
+            Iterator<Map.Entry<K, V>> it = bucket.iterator();
+            while(it.hasNext())
+            {
+                Map.Entry<K, V> entry = it.next();
+                if(value.equals(entry.getValue())) return true;
+            }            
+        }
         return false;
     }
     
@@ -486,32 +543,39 @@ public class TSBHashtableDA<K,V> implements Map<K,V>, Cloneable, Serializable
     {
         int old_length = this.table.length;
         
-        // nuevo tamaño: primer primo mayor o igual al 50% del anterior...
-        int new_length = nextPrime((int)(old_length * 1.5f));
+        // nuevo tamaño: doble del anterior, más uno para llevarlo a impar...
+        int new_length = old_length * 2 + 1;
         
-        // crear el nuevo arreglo de tamaño new_length...
-        Object temp[] = new Object[new_length];
-        for(int j=0; j<temp.length; j++) { temp[j] = new Entry<>(null, null); }
+        // no permitir que la tabla tenga un tamaño mayor al límite máximo...
+        // ... para evitar overflow y/o desborde de índices...
+        if(new_length > TSBHashtable.MAX_SIZE) 
+        { 
+            new_length = TSBHashtable.MAX_SIZE;
+        }
+
+        // crear el nuevo arreglo con new_length listas vacías...
+        TSBArrayList<Map.Entry<K, V>> temp[] = new TSBArrayList[new_length];
+        for(int j = 0; j < temp.length; j++) { temp[j] = new TSBArrayList<>(); }
         
         // notificación fail-fast iterator... la tabla cambió su estructura...
         this.modCount++;  
        
         // recorrer el viejo arreglo y redistribuir los objetos que tenia...
-        for(int i=0; i<this.table.length; i++)
+        for(int i = 0; i < this.table.length; i++)
         {
-           // obtener un objeto de la vieja lista...
-           Entry<K, V> x = (Entry<K, V>) table[i];
-
-           // si la casilla está cerrada...
-           if(x.getState() == CLOSED)
+           // entrar en la lista numero i, y recorrerla con su iterador...
+           Iterator<Map.Entry<K, V>> it = this.table[i].iterator();
+           while(it.hasNext())
            {
-               // ...obtener el valor de dispersión en el nuevo arreglo...
+               // obtener un objeto de la vieja lista...
+               Map.Entry<K, V> x = it.next();
+               
+               // obtener su nuevo valor de dispersión para el nuevo arreglo...
                K key = x.getKey();
-               int ik = this.h(key, temp.length);
-               int y = search_for_OPEN(temp, ik);
-
-               // ...insertar en el nuevo arreglo
-               temp[y] = x;
+               int y = this.h(key, temp.length);
+               
+               // insertarlo en el nuevo arreglo, en la lista numero "y"...
+               temp[y].add(x);
            }
         }
        
@@ -559,90 +623,50 @@ public class TSBHashtableDA<K,V> implements Map<K,V>, Cloneable, Serializable
         if(k < 0) k *= -1;
         return k % t;        
     }
-
-    private boolean isPrime(int n)
-    {
-        // negativos no admitidos en este contexto...
-        if(n < 0) return false;
-
-        if(n == 1) return false;
-        if(n == 2) return true;
-        if(n % 2 == 0) return false;
-
-        int raiz = (int) Math.pow(n, 0.5);
-        for(int div = 3;  div <= raiz; div += 2)
-        {
-            if(n % div == 0) return false;
-        }
-
-        return true;
-    }
-
-    private int nextPrime (int n)
-    {
-        if(n % 2 == 0) n++;
-        for(; !isPrime(n); n+=2);
-        return n;
-    }
-
+    
     /**
-     * Calcula el nivel de carga de la tabla, como un número en coma flotante entre 0 y 1.
-     * Si este valor se multiplica por 100, el resultado es el porcentaje de ocupación de la
-     * tabla.
-     * @return el nivel de ocupación de la tabla.
+     * Calcula la longitud promedio de las listas de la tabla.
+     * @return la longitud promedio de la listas contenidas en la tabla.
      */
-    private float load_level()
+    private int averageLength()
     {
-        return (float) this.count / this.table.length;
+        return this.count / this.table.length;
     } 
     
     /*
-     * Busca en la tabla un objeto Entry cuya clave coincida con key, a partir
-     * de la posición ik. Si lo encuentra, retorna ese objeto Entry. Si no lo
-     * encuentra, retorna null. Aplica exploración cuadrática.
+     * Busca en la lista bucket un objeto Entry cuya clave coincida con key.
+     * Si lo encuentra, retorna ese objeto Entry. Si no lo encuentra, retorna 
+     * null.
      */
-    private Map.Entry<K, V> search_for_entry(K key, int ik)
+    private Map.Entry<K, V> search_for_entry(K key, TSBArrayList<Map.Entry<K, V>> bucket)
     {
-        int pos = search_for_index(key, ik);
-        return pos != -1 ? (Map.Entry<K, V>) table[pos] : null;
+        Iterator<Map.Entry<K, V>> it = bucket.iterator();
+        while(it.hasNext())
+        {
+            Map.Entry<K, V> entry = it.next();
+            if(key.equals(entry.getKey())) return entry;
+        }
+        return null;
     }
     
     /*
-     * Busca en la tabla un objeto Entry cuya clave coincida con key, a partir
-     * de la posición ik. Si lo encuentra, retorna su posicíón. Si no lo encuentra,
-     * retorna -1. Aplica exploración cuadrática.
+     * Busca en la lista bucket un objeto Entry cuya clave coincida con key.
+     * Si lo encuentra, retorna su posicíón. Si no lo encuentra, retorna -1.
      */
-    private int search_for_index(K key, int ik)
+    private int search_for_index(K key, TSBArrayList<Map.Entry<K, V>> bucket)
     {
-        for(int j=0; ;j++)
+        Iterator<Map.Entry<K, V>> it = bucket.iterator();
+        for(int i=0; it.hasNext(); i++)
         {
-            ik += (int)Math.pow(j, 2);
-            ik %= table.length;
-
-            Entry<K, V> entry = (Entry<K, V>) table[ik];
-            if(entry.getState() == OPEN) { return -1; }
-            if(key.equals(entry.getKey())) { return ik; }
+            Map.Entry<K, V> entry = it.next();
+            if(key.equals(entry.getKey())) return i;
         }
-    }
+        return -1;
+    }  
 
-    /*
-     * Retorna el índice de la primera casilla abierta, a partir de la posición ik,
-     * en la tabla t. Aplica exploración cuadrática.
-     */
-    private int search_for_OPEN(Object t[], int ik)
-    {
-        for(int j=0; ;j++)
-        {
-            ik += (int)Math.pow(j, 2);
-            ik %= t.length;
-
-            Entry<K, V> entry = (Entry<K, V>) t[ik];
-            if(entry.getState() == OPEN) { return ik; }
-        }
-    }
-
+    
     //************************ Clases Internas.
-
+    
     /*
      * Clase interna que representa los pares de objetos que se almacenan en la
      * tabla hash: son instancias de esta clase las que realmente se guardan en 
@@ -654,20 +678,17 @@ public class TSBHashtableDA<K,V> implements Map<K,V>, Cloneable, Serializable
     {
         private K key;
         private V value;
-        private int state;
         
         public Entry(K key, V value) 
         {
-            this(key, value, OPEN);
-        }
-
-        public Entry(K key, V value, int state)
-        {
+            if(key == null || value == null)
+            {
+                throw new IllegalArgumentException("Entry(): parámetro null...");
+            }
             this.key = key;
             this.value = value;
-            this.state = state;
         }
-
+        
         @Override
         public K getKey() 
         {
@@ -680,8 +701,6 @@ public class TSBHashtableDA<K,V> implements Map<K,V>, Cloneable, Serializable
             return value;
         }
 
-        public int getState() { return state; }
-
         @Override
         public V setValue(V value) 
         {
@@ -693,14 +712,6 @@ public class TSBHashtableDA<K,V> implements Map<K,V>, Cloneable, Serializable
             V old = this.value;
             this.value = value;
             return old;
-        }
-
-        public void setState(int ns)
-        {
-            if(ns >= 0 && ns < 3)
-            {
-                state = ns;
-            }
         }
        
         @Override
@@ -753,31 +764,39 @@ public class TSBHashtableDA<K,V> implements Map<K,V>, Cloneable, Serializable
         @Override
         public int size() 
         {
-            return TSBHashtableDA.this.count;
+            return TSBHashtable.this.count;
         }
         
         @Override
         public boolean contains(Object o) 
         {
-            return TSBHashtableDA.this.containsKey(o);
+            return TSBHashtable.this.containsKey(o);
         }
         
         @Override
         public boolean remove(Object o) 
         {
-            return (TSBHashtableDA.this.remove(o) != null);
+            return (TSBHashtable.this.remove(o) != null);
         }
         
         @Override
         public void clear() 
         {
-            TSBHashtableDA.this.clear();
+            TSBHashtable.this.clear();
         }
         
         private class KeySetIterator implements Iterator<K>
         {
-            // REVISAR y HACER... Agregar los atributos que necesiten...
-
+            // índice de la lista actualmente recorrida...
+            private int current_bucket;
+            
+            // índice de la lista anterior (si se requiere en remove())...
+            private int last_bucket;
+                        
+            // índice del elemento actual en el iterador (el que fue retornado 
+            // la última vez por next() y será eliminado por remove())...
+            private int current_entry;
+                        
             // flag para controlar si remove() está bien invocado...
             private boolean next_ok;
             
@@ -790,9 +809,11 @@ public class TSBHashtableDA<K,V> implements Map<K,V>, Cloneable, Serializable
              */
             public KeySetIterator()
             {
-                // HACER...
+                current_bucket = 0; 
+                last_bucket = 0;
+                current_entry = -1;
                 next_ok = false;
-                expected_modCount = TSBHashtableDA.this.modCount;
+                expected_modCount = TSBHashtable.this.modCount;
             }
 
             /*
@@ -802,7 +823,25 @@ public class TSBHashtableDA<K,V> implements Map<K,V>, Cloneable, Serializable
             @Override
             public boolean hasNext() 
             {
-                // HACER...
+                // variable auxiliar t para simplificar accesos...
+                TSBArrayList<Map.Entry<K, V>> t[] = TSBHashtable.this.table;
+
+                if(TSBHashtable.this.isEmpty()) { return false; }
+                if(current_bucket >= t.length) { return false; }
+                
+                // bucket actual vacío o listo?...
+                if(t[current_bucket].isEmpty() || current_entry >= t[current_bucket].size() - 1)
+                {
+                    // ... -> ver el siguiente bucket no vacío...
+                    int next_bucket = current_bucket + 1;
+                    while(next_bucket < t.length && t[next_bucket].isEmpty())
+                    {
+                        next_bucket++;
+                    }
+                    if(next_bucket >= t.length) { return false; }
+                }
+                
+                // en principio alcanza con esto... revisar...    
                 return true;
             }
 
@@ -812,10 +851,8 @@ public class TSBHashtableDA<K,V> implements Map<K,V>, Cloneable, Serializable
             @Override
             public K next() 
             {
-                // REVISAR Y HACER...
-
                 // control: fail-fast iterator...
-                if(TSBHashtableDA.this.modCount != expected_modCount)
+                if(TSBHashtable.this.modCount != expected_modCount)
                 {    
                     throw new ConcurrentModificationException("next(): modificación inesperada de tabla...");
                 }
@@ -825,11 +862,39 @@ public class TSBHashtableDA<K,V> implements Map<K,V>, Cloneable, Serializable
                     throw new NoSuchElementException("next(): no existe el elemento pedido...");
                 }
                 
+                // variable auxiliar t para simplificar accesos...
+                TSBArrayList<Map.Entry<K, V>> t[] = TSBHashtable.this.table;
+                
+                // se puede seguir en el mismo bucket?...
+                TSBArrayList<Map.Entry<K, V>> bucket = t[current_bucket];
+                if(!t[current_bucket].isEmpty() && current_entry < bucket.size() - 1) { current_entry++; }
+                else
+                {   
+                    // si no se puede...
+                    // ...recordar el índice del bucket que se va a abandonar..
+                    last_bucket = current_bucket;
+                    
+                    // buscar el siguiente bucket no vacío, que DEBE existir, ya 
+                    // que se hasNext() retornó true...
+                    current_bucket++;
+                    while(t[current_bucket].isEmpty())
+                    {
+                        current_bucket++;
+                    }
+                    
+                    // actualizar la referencia bucket con el núevo índice...
+                    bucket = t[current_bucket];
+                    
+                    // y posicionarse en el primer elemento de ese bucket...
+                    current_entry = 0;
+                }
+                
                 // avisar que next() fue invocado con éxito...
                 next_ok = true;
                 
                 // y retornar la clave del elemento alcanzado...
-                return null;
+                K key = bucket.get(current_entry).getKey();
+                return key;
             }
             
             /*
@@ -841,21 +906,29 @@ public class TSBHashtableDA<K,V> implements Map<K,V>, Cloneable, Serializable
             @Override
             public void remove() 
             {
-                // REVISAR Y HACER...
-
                 if(!next_ok) 
                 { 
                     throw new IllegalStateException("remove(): debe invocar a next() antes de remove()..."); 
                 }
                 
+                // eliminar el objeto que retornó next() la última vez...
+                Map.Entry<K, V> garbage = TSBHashtable.this.table[current_bucket].remove(current_entry);
+
+                // quedar apuntando al anterior al que se retornó...                
+                if(last_bucket != current_bucket) 
+                {
+                    current_bucket = last_bucket;
+                    current_entry = TSBHashtable.this.table[current_bucket].size() - 1;
+                }
+
                 // avisar que el remove() válido para next() ya se activó...
                 next_ok = false;
                                 
                 // la tabla tiene un elementon menos...
-                TSBHashtableDA.this.count--;
+                TSBHashtable.this.count--;
 
-                // fail_fast iterator...
-                TSBHashtableDA.this.modCount++;
+                // fail_fast iterator: todo en orden...
+                TSBHashtable.this.modCount++;
                 expected_modCount++;
             }     
         }
@@ -887,10 +960,15 @@ public class TSBHashtableDA<K,V> implements Map<K,V>, Cloneable, Serializable
         @Override
         public boolean contains(Object o) 
         {
-            // HACER...
             if(o == null) { return false; } 
             if(!(o instanceof Entry)) { return false; }
             
+            Map.Entry<K, V> entry = (Map.Entry<K,V>)o;
+            K key = entry.getKey();
+            int index = TSBHashtable.this.h(key);
+
+            TSBArrayList<Map.Entry<K, V>> bucket = TSBHashtable.this.table[index];
+            if(bucket.contains(entry)) { return true; }
             return false;
         }
 
@@ -901,29 +979,47 @@ public class TSBHashtableDA<K,V> implements Map<K,V>, Cloneable, Serializable
         @Override
         public boolean remove(Object o) 
         {
-            // HACER...
             if(o == null) { throw new NullPointerException("remove(): parámetro null");}
             if(!(o instanceof Entry)) { return false; }
 
+            Map.Entry<K, V> entry = (Map.Entry<K, V>) o;
+            K key = entry.getKey();
+            int index = TSBHashtable.this.h(key);
+            TSBArrayList<Map.Entry<K, V>> bucket = TSBHashtable.this.table[index];
+            
+            if(bucket.remove(entry)) 
+            {
+                TSBHashtable.this.count--;
+                TSBHashtable.this.modCount++;
+                return true;
+            }
             return false;
         }
 
         @Override
         public int size() 
         {
-            return TSBHashtableDA.this.count;
+            return TSBHashtable.this.count;
         }
 
         @Override
         public void clear() 
         {
-            TSBHashtableDA.this.clear();
+            TSBHashtable.this.clear();
         }
         
         private class EntrySetIterator implements Iterator<Map.Entry<K, V>>
         {
-            // REVISAR y HACER... Agregar los atributos que necesiten...
-
+            // índice de la lista actualmente recorrida...
+            private int current_bucket;
+            
+            // índice de la lista anterior (si se requiere en remove())...
+            private int last_bucket;
+                        
+            // índice del elemento actual en el iterador (el que fue retornado 
+            // la última vez por next() y será eliminado por remove())...
+            private int current_entry;
+                        
             // flag para controlar si remove() está bien invocado...
             private boolean next_ok;
             
@@ -936,10 +1032,11 @@ public class TSBHashtableDA<K,V> implements Map<K,V>, Cloneable, Serializable
              */
             public EntrySetIterator()
             {
-                // HACER...
-
+                current_bucket = 0; 
+                last_bucket = 0;
+                current_entry = -1;
                 next_ok = false;
-                expected_modCount = TSBHashtableDA.this.modCount;
+                expected_modCount = TSBHashtable.this.modCount;
             }
 
             /*
@@ -949,8 +1046,25 @@ public class TSBHashtableDA<K,V> implements Map<K,V>, Cloneable, Serializable
             @Override
             public boolean hasNext() 
             {
-                // HACER...
+                // variable auxiliar t para simplificar accesos...
+                TSBArrayList<Map.Entry<K, V>> t[] = TSBHashtable.this.table;
 
+                if(TSBHashtable.this.isEmpty()) { return false; }
+                if(current_bucket >= t.length) { return false; }
+                
+                // bucket actual vacío o listo?...
+                if(t[current_bucket].isEmpty() || current_entry >= t[current_bucket].size() - 1)
+                {
+                    // ... -> ver el siguiente bucket no vacío...
+                    int next_bucket = current_bucket + 1;
+                    while(next_bucket < t.length && t[next_bucket].isEmpty())
+                    {
+                        next_bucket++;
+                    }
+                    if(next_bucket >= t.length) { return false; }
+                }
+                
+                // en principio alcanza con esto... revisar...    
                 return true;
             }
 
@@ -960,10 +1074,8 @@ public class TSBHashtableDA<K,V> implements Map<K,V>, Cloneable, Serializable
             @Override
             public Map.Entry<K, V> next() 
             {
-                //HACER...
-
                 // control: fail-fast iterator...
-                if(TSBHashtableDA.this.modCount != expected_modCount)
+                if(TSBHashtable.this.modCount != expected_modCount)
                 {    
                     throw new ConcurrentModificationException("next(): modificación inesperada de tabla...");
                 }
@@ -973,12 +1085,38 @@ public class TSBHashtableDA<K,V> implements Map<K,V>, Cloneable, Serializable
                     throw new NoSuchElementException("next(): no existe el elemento pedido...");
                 }
                 
-
+                // variable auxiliar t para simplificar accesos...
+                TSBArrayList<Map.Entry<K, V>> t[] = TSBHashtable.this.table;
+                
+                // se puede seguir en el mismo bucket?...
+                TSBArrayList<Map.Entry<K, V>> bucket = t[current_bucket];
+                if(!t[current_bucket].isEmpty() && current_entry < bucket.size() - 1) { current_entry++; }
+                else
+                {   
+                    // si no se puede...
+                    // ...recordar el índice del bucket que se va a abandonar..
+                    last_bucket = current_bucket;
+                    
+                    // buscar el siguiente bucket no vacío, que DEBE existir, ya 
+                    // que se hasNext() retornó true...
+                    current_bucket++;
+                    while(t[current_bucket].isEmpty())
+                    {
+                        current_bucket++;
+                    }
+                    
+                    // actualizar la referencia bucket con el núevo índice...
+                    bucket = t[current_bucket];
+                    
+                    // y posicionarse en el primer elemento de ese bucket...
+                    current_entry = 0;
+                }
+                
                 // avisar que next() fue invocado con éxito...
                 next_ok = true;
                 
                 // y retornar el elemento alcanzado...
-                return null;
+                return bucket.get(current_entry);
             }
             
             /*
@@ -990,22 +1128,29 @@ public class TSBHashtableDA<K,V> implements Map<K,V>, Cloneable, Serializable
             @Override
             public void remove() 
             {
-                // HACER...
-
                 if(!next_ok) 
                 { 
                     throw new IllegalStateException("remove(): debe invocar a next() antes de remove()..."); 
                 }
                 
+                // eliminar el objeto que retornó next() la última vez...
+                Map.Entry<K, V> garbage = TSBHashtable.this.table[current_bucket].remove(current_entry);
+
+                // quedar apuntando al anterior al que se retornó...                
+                if(last_bucket != current_bucket) 
+                {
+                    current_bucket = last_bucket;
+                    current_entry = TSBHashtable.this.table[current_bucket].size() - 1;
+                }
 
                 // avisar que el remove() válido para next() ya se activó...
                 next_ok = false;
                                 
                 // la tabla tiene un elementon menos...
-                TSBHashtableDA.this.count--;
+                TSBHashtable.this.count--;
 
-                // fail_fast iterator...
-                TSBHashtableDA.this.modCount++;
+                // fail_fast iterator: todo en orden...
+                TSBHashtable.this.modCount++;
                 expected_modCount++;
             }     
         }
@@ -1032,25 +1177,33 @@ public class TSBHashtableDA<K,V> implements Map<K,V>, Cloneable, Serializable
         @Override
         public int size() 
         {
-            return TSBHashtableDA.this.count;
+            return TSBHashtable.this.count;
         }
         
         @Override
         public boolean contains(Object o) 
         {
-            return TSBHashtableDA.this.containsValue(o);
+            return TSBHashtable.this.containsValue(o);
         }
         
         @Override
         public void clear() 
         {
-            TSBHashtableDA.this.clear();
+            TSBHashtable.this.clear();
         }
         
         private class ValueCollectionIterator implements Iterator<V>
         {
-            // REVISAR y HACER... Agregar los atributos que necesiten...
-
+            // índice de la lista actualmente recorrida...
+            private int current_bucket;
+            
+            // índice de la lista anterior (si se requiere en remove())...
+            private int last_bucket;
+                        
+            // índice del elemento actual en el iterador (el que fue retornado 
+            // la última vez por next() y será eliminado por remove())...
+            private int current_entry;
+                        
             // flag para controlar si remove() está bien invocado...
             private boolean next_ok;
             
@@ -1063,10 +1216,11 @@ public class TSBHashtableDA<K,V> implements Map<K,V>, Cloneable, Serializable
              */
             public ValueCollectionIterator()
             {
-                // HACER...
-
+                current_bucket = 0; 
+                last_bucket = 0;
+                current_entry = -1;
                 next_ok = false;
-                expected_modCount = TSBHashtableDA.this.modCount;
+                expected_modCount = TSBHashtable.this.modCount;
             }
 
             /*
@@ -1076,8 +1230,25 @@ public class TSBHashtableDA<K,V> implements Map<K,V>, Cloneable, Serializable
             @Override
             public boolean hasNext() 
             {
-                // HACER...
+                // variable auxiliar t para simplificar accesos...
+                TSBArrayList<Map.Entry<K, V>> t[] = TSBHashtable.this.table;
 
+                if(TSBHashtable.this.isEmpty()) { return false; }
+                if(current_bucket >= t.length) { return false; }
+                
+                // bucket actual vacío o listo?...
+                if(t[current_bucket].isEmpty() || current_entry >= t[current_bucket].size() - 1)
+                {
+                    // ... -> ver el siguiente bucket no vacío...
+                    int next_bucket = current_bucket + 1;
+                    while(next_bucket < t.length && t[next_bucket].isEmpty())
+                    {
+                        next_bucket++;
+                    }
+                    if(next_bucket >= t.length) { return false; }
+                }
+                
+                // en principio alcanza con esto... revisar...    
                 return true;
             }
 
@@ -1087,10 +1258,8 @@ public class TSBHashtableDA<K,V> implements Map<K,V>, Cloneable, Serializable
             @Override
             public V next() 
             {
-                // HACER...
-
                 // control: fail-fast iterator...
-                if(TSBHashtableDA.this.modCount != expected_modCount)
+                if(TSBHashtable.this.modCount != expected_modCount)
                 {    
                     throw new ConcurrentModificationException("next(): modificación inesperada de tabla...");
                 }
@@ -1100,12 +1269,38 @@ public class TSBHashtableDA<K,V> implements Map<K,V>, Cloneable, Serializable
                     throw new NoSuchElementException("next(): no existe el elemento pedido...");
                 }
                 
-
+                // variable auxiliar t para simplificar accesos...
+                TSBArrayList<Map.Entry<K, V>> t[] = TSBHashtable.this.table;
+                
+                // se puede seguir en el mismo bucket?...
+                TSBArrayList<Map.Entry<K, V>> bucket = t[current_bucket];
+                if(!t[current_bucket].isEmpty() && current_entry < bucket.size() - 1) { current_entry++; }
+                else
+                {   
+                    // si no se puede...
+                    // ...recordar el índice del bucket que se va a abandonar..
+                    last_bucket = current_bucket;
+                    
+                    // buscar el siguiente bucket no vacío, que DEBE existir, ya 
+                    // que se hasNext() retornó true...
+                    current_bucket++;
+                    while(t[current_bucket].isEmpty())
+                    {
+                        current_bucket++;
+                    }
+                    
+                    // actualizar la referencia bucket con el núevo índice...
+                    bucket = t[current_bucket];
+                    
+                    // y posicionarse en el primer elemento de ese bucket...
+                    current_entry = 0;
+                }
+                
                 // avisar que next() fue invocado con éxito...
                 next_ok = true;
                 
                 // y retornar la clave del elemento alcanzado...
-                V value = null;
+                V value = bucket.get(current_entry).getValue();
                 return value;
             }
             
@@ -1118,22 +1313,29 @@ public class TSBHashtableDA<K,V> implements Map<K,V>, Cloneable, Serializable
             @Override
             public void remove() 
             {
-                // HACER...
-
                 if(!next_ok) 
                 { 
                     throw new IllegalStateException("remove(): debe invocar a next() antes de remove()..."); 
                 }
                 
+                // eliminar el objeto que retornó next() la última vez...
+                Map.Entry<K, V> garbage = TSBHashtable.this.table[current_bucket].remove(current_entry);
+
+                // quedar apuntando al anterior al que se retornó...                
+                if(last_bucket != current_bucket) 
+                {
+                    current_bucket = last_bucket;
+                    current_entry = TSBHashtable.this.table[current_bucket].size() - 1;
+                }
 
                 // avisar que el remove() válido para next() ya se activó...
                 next_ok = false;
                                 
                 // la tabla tiene un elementon menos...
-                TSBHashtableDA.this.count--;
+                TSBHashtable.this.count--;
 
-                // fail_fast iterator...
-                TSBHashtableDA.this.modCount++;
+                // fail_fast iterator: todo en orden...
+                TSBHashtable.this.modCount++;
                 expected_modCount++;
             }     
         }

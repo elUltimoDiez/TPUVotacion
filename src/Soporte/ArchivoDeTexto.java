@@ -3,7 +3,6 @@ package Soporte;
 import Negocio.Agrupacion;
 import Negocio.Region;
 import Negocio.Resultados;
-
 import java.io.File;
 import java.io.FileNotFoundException;
 import java.util.Scanner;
@@ -15,9 +14,9 @@ public class ArchivoDeTexto {
         archivo = new File(ruta);
     }
 
-    public TSBHashtableDA seleccionarAgrupaciones() {
+    public TSBHashtable seleccionarAgrupaciones() {
         String linea = "", campos[];
-        TSBHashtableDA tabla = new TSBHashtableDA(10);
+        TSBHashtable tabla = new TSBHashtable(10);
         try {
             Scanner entrada = new Scanner(archivo);
             while (entrada.hasNext()){
@@ -72,7 +71,7 @@ public class ArchivoDeTexto {
         return pais;
     }
 
-    public void sumarVotosAgrupaciones(TSBHashtableDA tabla) {
+    public void sumarVotosAgrupaciones(TSBHashtable tabla) {
         String linea = "", campos[];
         Agrupacion agrupacion;
         int votos;

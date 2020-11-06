@@ -56,11 +56,23 @@ public class PrincipalController {
     }
 
     public void elegirSeccion(ActionEvent actionEvent) {
+        ObservableList ol;
         if (cmbSeccion.getValue() != null){
             Region seccion = (Region) cmbSeccion.getValue();
-            ObservableList ol = FXCollections.observableArrayList(seccion.getSubregiones());
+            ol = FXCollections.observableArrayList(seccion.getSubregiones());
             cmbCircuito.setItems(ol);
             ol = FXCollections.observableArrayList(resultados.getResultadosRegion(seccion.getCodigo()));
+            lvwResultados.setItems(ol);
+        } else{
+            cmbCircuito.getItems().clear();
+        }
+    }
+
+    public void elegirCircuito(ActionEvent actionEvent) {
+        ObservableList ol;
+        if (cmbCircuito.getValue() != null){
+            Region circuito = (Region) cmbCircuito.getValue();
+            ol = FXCollections.observableArrayList(resultados.getResultadosRegion(circuito.getCodigo()));
             lvwResultados.setItems(ol);
         } else{
             cmbCircuito.getItems().clear();
