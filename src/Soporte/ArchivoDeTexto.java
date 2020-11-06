@@ -71,7 +71,7 @@ public class ArchivoDeTexto {
         return pais;
     }
 
-    public void sumarVotosAgrupaciones(TSBHashtable tabla) {
+    /*public void sumarVotosAgrupaciones(TSBHashtable tabla) {
         String linea = "", campos[];
         Agrupacion agrupacion;
         int votos;
@@ -89,7 +89,7 @@ public class ArchivoDeTexto {
         } catch (FileNotFoundException e) {
             e.printStackTrace();
         }
-    }
+    }*/
 
     public void sumarVotosPorRegion(Resultados resultados) {
         String linea = "", campos[];
